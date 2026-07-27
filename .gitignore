@@ -1,0 +1,14 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Never commit Cloudflare Tunnel credentials
+*.pem
+*.json
+!package.json
+.cloudflared/
+cert.pem
+
+# OS
+.DS_Store

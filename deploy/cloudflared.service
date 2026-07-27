@@ -1,0 +1,12 @@
+[Unit]
+Description=Cloudflare Tunnel (devbox-status)
+After=network.target devbox-status.service
+Wants=devbox-status.service
+
+[Service]
+ExecStart=%h/.local/bin/cloudflared --config %h/.cloudflared/config.yml tunnel run devbox-status
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

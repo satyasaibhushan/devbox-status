@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>devbox // status</title>
+<link rel="icon" href="data:," />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Michroma&family=Fragment+Mono:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg: #060a08;
+    --bg-panel: #0b120e;
+    --line: #1c2e22;
+    --phosphor: #4dffa0;
+    --phosphor-dim: #1f6b46;
+    --amber: #ffb703;
+    --red: #ff4d4d;
+    --text: #cdf5df;
+    --text-dim: #6f9483;
+    --glow: 0 0 8px currentColor;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background: radial-gradient(ellipse at 50% -10%, #0d1712 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: 'Fragment Mono', monospace;
+    min-height:100vh;
+    overflow-x:hidden;
+    position:relative;
+  }
+  /* CRT scanlines + vignette */
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.18) 3px
+    );
+    pointer-events:none;
+    z-index: 50;
+    mix-blend-mode: multiply;
+  }
+  body::after{
+    content:"";
+    position:fixed; inset:0;
+    box-shadow: inset 0 0 140px 40px rgba(0,0,0,0.75);
+    pointer-events:none;
+    z-index:51;
+  }
+  @keyframes flicker{
+    0%{ opacity:0.4; }
+    3%{ opacity:1; }
+    6%{ opacity:0.55; }
+    9%{ opacity:1; }
+    100%{ opacity:1; }
+  }
+  .crt-root{ animation: flicker 0.9s steps(1) 1; }
+
+  .wrap{
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 40px 24px 64px;
+    position: relative;
+    z-index: 1;
+  }
+
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 18px;
+    margin-bottom: 32px;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  h1{
+    font-family: 'Michroma', monospace;
+    font-size: clamp(20px, 3.4vw, 32px);
+    font-weight: 400;
+    letter-spacing: 2px;
+    margin:0;
+    color: var(--phosphor);
+    text-shadow: var(--glow);
+  }
+  h1 .slash{ color: var(--text-dim); }
+  .cursor{
+    display:inline-block;
+    width:0.5em; height:1em;
+    background: var(--phosphor);
+    margin-left: 6px;
+    vertical-align: -0.15em;
+    animation: blink 1.1s steps(1) infinite;
+    box-shadow: var(--glow);
+  }
+  @keyframes blink{ 50%{ opacity:0; } }
+
+  .meta{
+    text-align:right;
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+  .meta .host{ color: var(--text); }
+
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-family:'Michroma', monospace;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    padding: 6px 12px;
+    border: 1px solid var(--phosphor-dim);
+    border-radius: 3px;
+    color: var(--phosphor);
+    text-shadow: var(--glow);
+  }
+  .pill .dot{
+    width:8px; height:8px; border-radius:50%;
+    background: var(--phosphor);
+    box-shadow: 0 0 6px 2px var(--phosphor);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{ opacity:1; transform:scale(1); }
+    50%{ opacity:0.5; transform:scale(0.8); }
+  }
+  .pill.offline{ border-color:#5a2020; color: var(--red); text-shadow:0 0 8px currentColor; }
+  .pill.offline .dot{ background: var(--red); box-shadow:0 0 6px 2px var(--red); animation:none; }
+
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px;
+  }
+
+  .panel{
+    background: linear-gradient(180deg, var(--bg-panel), #070b09);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 18px 20px;
+    position: relative;
+  }
+  .panel::before{
+    content: attr(data-tag);
+    position:absolute;
+    top:-9px; left:14px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-size:10px;
+    letter-spacing:2px;
+    color: var(--text-dim);
+    font-family:'Michroma', monospace;
+  }
+  .panel .corner{
+    position:absolute; width:8px; height:8px;
+    border-color: var(--phosphor-dim);
+    opacity:0.7;
+  }
+  .panel .corner.tl{ top:-1px; left:-1px; border-top:1px solid; border-left:1px solid; }
+  .panel .corner.br{ bottom:-1px; right:-1px; border-bottom:1px solid; border-right:1px solid; }
+
+  .stat-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom: 6px; }
+  .stat-label{ font-size:11px; color: var(--text-dim); letter-spacing:1px; }
+  .stat-value{ font-size: 30px; color: var(--phosphor); text-shadow: var(--glow); font-variant-numeric: tabular-nums; }
+  .stat-value.warn{ color: var(--amber); }
+  .stat-value.crit{ color: var(--red); }
+  .stat-sub{ font-size:11px; color:var(--text-dim); margin-top:2px; }
+
+  .bar{
+    height:8px; border-radius: 2px;
+    background: #0e1712;
+    border: 1px solid var(--line);
+    overflow:hidden;
+    margin-top:10px;
+  }
+  .bar > div{
+    height:100%;
+    background: linear-gradient(90deg, var(--phosphor-dim), var(--phosphor));
+    box-shadow: var(--glow);
+    width:0%;
+    transition: width 0.6s ease;
+  }
+  .bar.warn > div{ background: linear-gradient(90deg, #7a5a10, var(--amber)); }
+  .bar.crit > div{ background: linear-gradient(90deg, #7a1010, var(--red)); }
+
+  .temps{ list-style:none; margin:8px 0 0; padding:0; font-size:12px; }
+  .temps li{ display:flex; justify-content:space-between; padding:4px 0; border-bottom: 1px dashed var(--line); }
+  .temps li:last-child{ border-bottom:none; }
+  .temps .t-label{ color: var(--text-dim); }
+  .temps .t-val{ color: var(--phosphor); font-variant-numeric: tabular-nums; }
+  .temps .t-val.warn{ color: var(--amber); }
+  .temps .t-val.crit{ color: var(--red); }
+
+  footer{
+    margin-top: 36px;
+    text-align:center;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  .offline-banner{
+    display:none;
+    border: 1px solid #5a2020;
+    background: rgba(90,20,20,0.15);
+    color: var(--red);
+    text-shadow:0 0 6px currentColor;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-align:center;
+  }
+  body.offline .offline-banner{ display:block; }
+  body.offline .grid{ opacity:0.35; filter: saturate(0.4); }
+
+  @media (max-width: 480px){
+    header{ flex-direction:column; align-items:flex-start; }
+    .meta{ text-align:left; }
+  }
+</style>
+</head>
+<body class="crt-root">
+  <div class="wrap">
+    <header>
+      <h1><span class="slash">//</span> DEVBOX <span class="slash">::</span> STATUS<span class="cursor"></span></h1>
+      <div class="meta">
+        <div id="pill-wrap"><span class="pill" id="pill"><span class="dot"></span><span id="pill-text">CONNECTING</span></span></div>
+        <div class="host">devbox.bhushan.fun</div>
+      </div>
+    </header>
+
+    <div class="offline-banner" id="offline-banner">
+      ⚠ CONNECTION LOST — retrying every 4s
+    </div>
+
+    <div class="grid">
+
+      <div class="panel" data-tag="CPU">
+        <div class="corner tl"></div><div class="corner br"></div>
+        <div class="stat-row">
+          <span class="stat-label">UTILIZATION</span>
+          <span class="stat-value" id="cpu-percent">--%</span>
+        </div>
+        <div class="bar" id="cpu-bar"><div></div></div>
+        <div class="stat-sub" id="cpu-sub">-- cores · load --</div>
+      </div>
+
+      <div class="panel" data-tag="MEMORY">
+        <div class="corner tl"></div><div class="corner br"></div>
+        <div class="stat-row">
+          <span class="stat-label">IN USE</span>
+          <span class="stat-value" id="mem-percent">--%</span>
+        </div>
+        <div class="bar" id="mem-bar"><div></div></div>
+        <div class="stat-sub" id="mem-sub">-- / --</div>
+      </div>
+
+      <div class="panel" data-tag="DISK /">
+        <div class="corner tl"></div><div class="corner br"></div>
+        <div class="stat-row">
+          <span class="stat-label">IN USE</span>
+          <span class="stat-value" id="disk-percent">--%</span>
+        </div>
+        <div class="bar" id="disk-bar"><div></div></div>
+        <div class="stat-sub" id="disk-sub">-- / --</div>
+      </div>
+
+      <div class="panel" data-tag="UPTIME">
+        <div class="corner tl"></div><div class="corner br"></div>
+        <div class="stat-row">
+          <span class="stat-label">SINCE BOOT</span>
+        </div>
+        <div class="stat-value" id="uptime-val" style="font-size:22px;">--</div>
+      </div>
+
+      <div class="panel" data-tag="TEMPERATURES" style="grid-column: span 2;">
+        <div class="corner tl"></div><div class="corner br"></div>
+        <ul class="temps" id="temps-list">
+          <li><span class="t-label">reading sensors…</span></li>
+        </ul>
+      </div>
+
+    </div>
+
+    <footer id="footer">last updated —</footer>
+  </div>
+
+<script>
+const POLL_MS = 4000;
+const $ = (id) => document.getElementById(id);
+
+function fmtBytes(n){
+  const units = ['B','KB','MB','GB','TB'];
+  let i = 0;
+  while(n >= 1024 && i < units.length-1){ n /= 1024; i++; }
+  return `${n.toFixed(1)} ${units[i]}`;
+}
+
+function fmtUptime(sec){
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return `${d}d ${h}h ${m}m`;
+}
+
+function levelClass(pct){
+  if(pct >= 90) return 'crit';
+  if(pct >= 70) return 'warn';
+  return '';
+}
+
+function setGauge(prefix, percent, subText){
+  const pctEl = $(`${prefix}-percent`);
+  const barEl = $(`${prefix}-bar`);
+  const cls = levelClass(percent);
+  pctEl.textContent = `${percent.toFixed(0)}%`;
+  pctEl.className = 'stat-value ' + cls;
+  barEl.className = 'bar ' + cls;
+  barEl.firstElementChild.style.width = `${Math.min(percent,100)}%`;
+  if(subText) $(`${prefix}-sub`).textContent = subText;
+}
+
+function renderTemps(temps){
+  const list = $('temps-list');
+  if(!temps || temps.length === 0){
+    list.innerHTML = '<li><span class="t-label">no sensors reported</span></li>';
+    return;
+  }
+  list.innerHTML = temps.map(t => {
+    let cls = '';
+    if(t.critical && t.current >= t.critical) cls = 'crit';
+    else if(t.high && t.current >= t.high) cls = 'warn';
+    return `<li><span class="t-label">${t.label}</span><span class="t-val ${cls}">${t.current.toFixed(1)}°C</span></li>`;
+  }).join('');
+}
+
+function setOnline(isOnline){
+  document.body.classList.toggle('offline', !isOnline);
+  const pill = $('pill');
+  const text = $('pill-text');
+  pill.className = 'pill' + (isOnline ? '' : ' offline');
+  text.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+}
+
+async function poll(){
+  try{
+    const res = await fetch('/api/status', { cache: 'no-store' });
+    if(!res.ok) throw new Error('bad status');
+    const data = await res.json();
+
+    setOnline(true);
+    setGauge('cpu', data.cpu.percent, `${data.cpu.count} cores · load ${data.cpu.load_avg['1m'].toFixed(2)}`);
+    setGauge('mem', data.memory.percent, `${fmtBytes(data.memory.used)} / ${fmtBytes(data.memory.total)}`);
+    setGauge('disk', data.disk.percent, `${fmtBytes(data.disk.used)} / ${fmtBytes(data.disk.total)}`);
+    $('uptime-val').textContent = fmtUptime(data.uptime_seconds);
+    renderTemps(data.temperatures);
+    $('footer').textContent = `last updated ${new Date(data.timestamp * 1000).toLocaleTimeString()}`;
+  }catch(err){
+    setOnline(false);
+  }finally{
+    setTimeout(poll, POLL_MS);
+  }
+}
+
+poll();
+</script>
+</body>
+</html>

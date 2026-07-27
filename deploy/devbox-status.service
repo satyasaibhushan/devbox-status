@@ -1,0 +1,18 @@
+[Unit]
+Description=devbox status API + frontend
+After=network.target
+
+[Service]
+WorkingDirectory=%h/devbox-status/backend
+ExecStart=%h/devbox-status/backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8420
+Restart=on-failure
+RestartSec=3
+
+# hardening (namespace-based directives like ProtectSystem/ProtectHome need
+# unprivileged user-namespaces, which are restricted by default for
+# systemd --user services on this box, so keep to non-namespace sandboxing)
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target
