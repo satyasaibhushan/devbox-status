@@ -67,7 +67,17 @@ Verified after removing `cert.pem`: the tunnel still registers and serves, and
 An attacker who owns the box still has `<TUNNEL_ID>.json`, so they can:
 
 - **Serve whatever they like at `devbox.bhushan.fun`** — they control the
-  origin. They cannot touch any other hostname, record, or zone.
+  origin. At the infrastructure layer that is contained: they cannot change DNS
+  for another hostname, reach another origin, obtain a TLS private key (TLS
+  terminates at Cloudflare), or spoof domain email (SPF/DKIM are DNS records
+  they cannot write).
+- **But in the browser, subdomains are the same *site* as the apex**, so
+  "only this hostname" understates it. From `devbox.bhushan.fun` an attacker
+  can set cookies scoped `Domain=bhushan.fun` — sent to the apex and every
+  other subdomain, enabling cookie tossing and session fixation; can read any
+  cookie other sites scoped to the parent domain; and is *same-site* for
+  requests to `bhushan.fun`, so `SameSite=Strict` is no defence against them.
+  Cookies set with no `Domain` attribute are host-only and unaffected.
 - **Rewrite `config.yml` and repoint ingress at any host the devbox can
   reach** (router admin page, another LAN machine, an SSH port) and reach it
   remotely through the tunnel. They already have LAN access by owning the box;
@@ -84,6 +94,15 @@ Mitigations, in order of effort:
   routing stops being version-controlled in this repo.
 - **Run the tunnel as its own unprivileged user**, so compromise of the primary
   account does not immediately hand over the tunnel credential.
+- **Contain the cross-subdomain cookie risk** *before* hosting anything
+  authenticated on `bhushan.fun`: use `__Host-` prefixed cookies there (the
+  prefix forces host-only + `Secure` + `Path=/`, and browsers refuse to let a
+  subdomain set one, making it structurally immune to tossing), and never set
+  cookies with an explicit `Domain=bhushan.fun`. For true isolation, host this
+  page on a **separate registrable domain** — different registrable domain
+  means no cookie relationship at all. Today nothing else runs on the domain,
+  so this is latent rather than live; the trap is that it activates silently
+  the day a login appears elsewhere on `bhushan.fun`.
 
 Note that theft of either credential is **not** Cloudflare account takeover:
 neither can log in, change account settings, or reach billing. Keep 2FA on the
