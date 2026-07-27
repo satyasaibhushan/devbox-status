@@ -33,6 +33,62 @@ browser → Cloudflare edge (TLS) → outbound tunnel → 127.0.0.1:8420 (uvicor
 The tradeoff is trusting Cloudflare as a middleman. That is fine for public
 metrics; it would not be for anything sensitive.
 
+## Threat model: what if the devbox is compromised?
+
+`cloudflared tunnel login` writes **two** credentials, with very different
+blast radii. Keeping them straight is the whole game.
+
+| File | Authorizes | Revocation |
+| --- | --- | --- |
+| `cert.pem` | Zone-level: create/delete tunnels **and write DNS records** for the whole zone | None per-cert; long-lived |
+| `<TUNNEL_ID>.json` | Running *this one tunnel* | Instant: `cloudflared tunnel delete` |
+
+`cert.pem` is the dangerous one — with it, a compromised box could repoint any
+`bhushan.fun` record at an attacker's server. It is needed **only for
+management operations, never at runtime**, so it does not belong on an
+always-on internet-facing host.
+
+**So it is deliberately not on the devbox.** It lives on the admin laptop at
+`~/.cloudflared/cert.pem`, and management commands (`tunnel create`,
+`tunnel route dns`) are run from there. Two details make this work:
+
+1. `config.yml` pins the tunnel **UUID** and `credentials-file`, and
+   `cloudflared.service` runs `tunnel run` with *no name argument* — resolving
+   a name to an ID is an API call that would require `cert.pem`.
+2. `--no-autoupdate`, so the daemon never fetches and executes a new binary on
+   its own. Update it deliberately instead.
+
+Verified after removing `cert.pem`: the tunnel still registers and serves, and
+`tunnel route dns` / `tunnel list` from the box both fail with
+`Error locating origin cert`.
+
+### Residual risk, honestly
+
+An attacker who owns the box still has `<TUNNEL_ID>.json`, so they can:
+
+- **Serve whatever they like at `devbox.bhushan.fun`** — they control the
+  origin. They cannot touch any other hostname, record, or zone.
+- **Rewrite `config.yml` and repoint ingress at any host the devbox can
+  reach** (router admin page, another LAN machine, an SSH port) and reach it
+  remotely through the tunnel. They already have LAN access by owning the box;
+  what this adds is a durable inbound channel.
+
+Mitigations, in order of effort:
+
+- **Revoke instantly** when suspected: `cloudflared tunnel delete devbox-status`
+  invalidates the credential and kills the route. Rotate by recreating.
+- **Watch the Cloudflare audit log** for tunnel or DNS changes you did not make.
+- **Close the ingress-rewrite hole** by converting to a *remotely-managed*
+  tunnel, where ingress rules live in the Cloudflare dashboard instead of
+  `config.yml`. The box then cannot change what the tunnel routes to. Cost:
+  routing stops being version-controlled in this repo.
+- **Run the tunnel as its own unprivileged user**, so compromise of the primary
+  account does not immediately hand over the tunnel credential.
+
+Note that theft of either credential is **not** Cloudflare account takeover:
+neither can log in, change account settings, or reach billing. Keep 2FA on the
+account and that boundary holds.
+
 ## Setup
 
 Requires Python 3.11+ and a domain whose DNS is managed by Cloudflare.
@@ -75,17 +131,31 @@ cloudflared tunnel create devbox-status
 cloudflared tunnel route dns devbox-status devbox.bhushan.fun
 ```
 
-Write `~/.cloudflared/config.yml`:
+Then **move `cert.pem` off the box** to your admin machine — see
+[Threat model](#threat-model-what-if-the-devbox-is-compromised). Nothing at
+runtime needs it:
+
+```bash
+scp devbox:~/.cloudflared/cert.pem ~/.cloudflared/cert.pem   # from the laptop
+ssh devbox 'rm ~/.cloudflared/cert.pem'
+```
+
+Write `~/.cloudflared/config.yml` (`chmod 600`). Pin the tunnel by **UUID, not
+name** — resolving a name is an API call needing `cert.pem`:
 
 ```yaml
-tunnel: devbox-status
+tunnel: <TUNNEL_ID>
 credentials-file: /home/YOUR_USER/.cloudflared/<TUNNEL_ID>.json
 
 ingress:
+  # the only hostname this tunnel serves, to the only port it may reach
   - hostname: devbox.bhushan.fun
     service: http://127.0.0.1:8420
   - service: http_status:404
 ```
+
+The trailing `http_status:404` matters: without it, unmatched hostnames could
+fall through to the origin.
 
 Then run it as a service:
 

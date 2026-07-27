@@ -4,7 +4,9 @@ After=network.target devbox-status.service
 Wants=devbox-status.service
 
 [Service]
-ExecStart=%h/.local/bin/cloudflared --config %h/.cloudflared/config.yml tunnel run devbox-status
+# No tunnel name argument: the tunnel UUID and credentials come from config.yml,
+# so running the tunnel needs no Cloudflare account certificate on this host.
+ExecStart=%h/.local/bin/cloudflared --no-autoupdate --config %h/.cloudflared/config.yml tunnel run
 Restart=on-failure
 RestartSec=3
 
