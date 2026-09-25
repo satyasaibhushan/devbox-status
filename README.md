@@ -1,8 +1,8 @@
 # Server status
 
-Public, read-only status for devbox and the AWS WorkSpace. The new page is live at `https://server-status.varshneyabhushan.workers.dev`; `devbox.bhushan.fun` still serves the old devbox-only page until cutover. Each machine sends CPU, memory, disk, uptime, and sensor readings once a minute. A machine shows offline 150 seconds after its last accepted report.
+Public, read-only status for devbox and the AWS WorkSpace at `https://devbox.bhushan.fun`. Each machine sends CPU, memory, disk, uptime, and sensor readings once a minute. A machine shows offline 150 seconds after its last accepted report.
 
-The existing devbox-only FastAPI page in `frontend/` and its Cloudflare Tunnel stay untouched until the cutover. The new page is in `site/`; the Worker API and machine list are in `src/`.
+The page is in `site/`; the Worker API and machine list are in `src/`. The previous devbox-only FastAPI app in `frontend/` remains installed. Its Cloudflare Tunnel stays active because it also serves `ssh.bhushan.fun`.
 
 ## Cloudflare setup
 
@@ -54,11 +54,11 @@ journalctl --user -u server-status-reporter.service -n 10 --no-pager
 
 The first run should log `Heartbeat accepted`. The API should show both machines online with fresh `received_at` values. Stop one timer temporarily and wait 150 seconds to check its offline state, then restart it.
 
-## Move `devbox.bhushan.fun`
+## Hostname routing
 
-Once both reporters work through the `workers.dev` URL, remove the existing `devbox.bhushan.fun` Tunnel DNS route and add that hostname as a Worker custom domain in Cloudflare. Confirm the new page and `/api/status` load through the hostname. Then stop the old devbox `cloudflared.service` and `devbox-status.service`. Keep the reporter timer running. The reporter URLs can continue using `workers.dev` so a later DNS change does not stop reporting.
+`wrangler.jsonc` routes `devbox.bhushan.fun/*` to the Worker. The existing proxied DNS record and Cloudflare Tunnel remain in place, preserving `ssh.bhushan.fun`. Do not stop `cloudflared.service`; it carries SSH. The reporters use the `workers.dev` URL independently of the public hostname.
 
-The old tunnel stays live until this cutover. Do not install a public tunnel or open an inbound port on the company WorkSpace.
+Do not install a public tunnel or open an inbound port on the company WorkSpace.
 
 ## Add a machine later
 
