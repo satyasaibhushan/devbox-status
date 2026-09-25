@@ -1,210 +1,86 @@
-# devbox-status
+# Server status
 
-A small status page for a home devbox — CPU, memory, disk, temperatures and
-uptime — served publicly at `devbox.bhushan.fun` with **no inbound ports open**
-on the home network.
+Public, read-only status for devbox and the AWS WorkSpace at `devbox.bhushan.fun`. Each machine sends CPU, memory, disk, uptime, and sensor readings once a minute. The page is hosted by Cloudflare, so it remains reachable when a machine is down. A machine shows offline 150 seconds after its last accepted report.
 
-## Architecture
+The existing devbox-only FastAPI page in `frontend/` and its Cloudflare Tunnel stay untouched until the cutover. The new page is in `site/`; the Worker API and machine list are in `src/`.
 
-```
-browser → Cloudflare edge (TLS) → outbound tunnel → 127.0.0.1:8420 (uvicorn)
-```
+## Deploy the shared page
 
-- `backend/main.py` — FastAPI app. One endpoint, `GET /api/status`, reading
-  metrics via `psutil`. Also serves `frontend/` as static files.
-- `frontend/index.html` — single-file dashboard, polls `/api/status` every 4s.
-  No build step, no dependencies.
-- `deploy/*.service` — `systemd --user` units for the app and the tunnel.
+From this repo on your admin laptop:
 
-### Why it is safe to expose
-
-- **No open inbound ports.** `cloudflared` dials *out* to Cloudflare and the
-  tunnel carries requests back. The router needs no port forward, and the home
-  IP is never published in DNS.
-- **The app binds to `127.0.0.1` only.** Nothing on the LAN can reach it
-  either; the tunnel is the sole path in.
-- **Read-only surface.** One GET endpoint returning numbers. No auth to
-  bypass, no writes, no shell-outs, no user input parsed.
-- **No root.** Both services run as an unprivileged user under
-  `systemd --user`, with `NoNewPrivileges=yes`.
-- **TLS terminates at Cloudflare**, so there is no certificate to manage or
-  renew on the box.
-
-The tradeoff is trusting Cloudflare as a middleman. That is fine for public
-metrics; it would not be for anything sensitive.
-
-## Threat model: what if the devbox is compromised?
-
-`cloudflared tunnel login` writes **two** credentials, with very different
-blast radii. Keeping them straight is the whole game.
-
-| File | Authorizes | Revocation |
-| --- | --- | --- |
-| `cert.pem` | Zone-level: create/delete tunnels **and write DNS records** for the whole zone | None per-cert; long-lived |
-| `<TUNNEL_ID>.json` | Running *this one tunnel* | Instant: `cloudflared tunnel delete` |
-
-`cert.pem` is the dangerous one — with it, a compromised box could repoint any
-`bhushan.fun` record at an attacker's server. It is needed **only for
-management operations, never at runtime**, so it does not belong on an
-always-on internet-facing host.
-
-**So it is deliberately not on the devbox.** It lives on the admin laptop at
-`~/.cloudflared/cert.pem`, and management commands (`tunnel create`,
-`tunnel route dns`) are run from there. Two details make this work:
-
-1. `config.yml` pins the tunnel **UUID** and `credentials-file`, and
-   `cloudflared.service` runs `tunnel run` with *no name argument* — resolving
-   a name to an ID is an API call that would require `cert.pem`.
-2. `--no-autoupdate`, so the daemon never fetches and executes a new binary on
-   its own. Update it deliberately instead.
-
-Verified after removing `cert.pem`: the tunnel still registers and serves, and
-`tunnel route dns` / `tunnel list` from the box both fail with
-`Error locating origin cert`.
-
-### Residual risk, honestly
-
-An attacker who owns the box still has `<TUNNEL_ID>.json`, so they can:
-
-- **Serve whatever they like at `devbox.bhushan.fun`** — they control the
-  origin. At the infrastructure layer that is contained: they cannot change DNS
-  for another hostname, reach another origin, obtain a TLS private key (TLS
-  terminates at Cloudflare), or spoof domain email (SPF/DKIM are DNS records
-  they cannot write).
-- **But in the browser, subdomains are the same *site* as the apex**, so
-  "only this hostname" understates it. From `devbox.bhushan.fun` an attacker
-  can set cookies scoped `Domain=bhushan.fun` — sent to the apex and every
-  other subdomain, enabling cookie tossing and session fixation; can read any
-  cookie other sites scoped to the parent domain; and is *same-site* for
-  requests to `bhushan.fun`, so `SameSite=Strict` is no defence against them.
-  Cookies set with no `Domain` attribute are host-only and unaffected.
-- **Rewrite `config.yml` and repoint ingress at any host the devbox can
-  reach** (router admin page, another LAN machine, an SSH port) and reach it
-  remotely through the tunnel. They already have LAN access by owning the box;
-  what this adds is a durable inbound channel.
-
-Mitigations, in order of effort:
-
-- **Revoke instantly** when suspected: `cloudflared tunnel delete devbox-status`
-  invalidates the credential and kills the route. Rotate by recreating.
-- **Watch the Cloudflare audit log** for tunnel or DNS changes you did not make.
-- **Close the ingress-rewrite hole** by converting to a *remotely-managed*
-  tunnel, where ingress rules live in the Cloudflare dashboard instead of
-  `config.yml`. The box then cannot change what the tunnel routes to. Cost:
-  routing stops being version-controlled in this repo.
-- **Run the tunnel as its own unprivileged user**, so compromise of the primary
-  account does not immediately hand over the tunnel credential.
-- **Contain the cross-subdomain cookie risk** *before* hosting anything
-  authenticated on `bhushan.fun`: use `__Host-` prefixed cookies there (the
-  prefix forces host-only + `Secure` + `Path=/`, and browsers refuse to let a
-  subdomain set one, making it structurally immune to tossing), and never set
-  cookies with an explicit `Domain=bhushan.fun`. For true isolation, host this
-  page on a **separate registrable domain** — different registrable domain
-  means no cookie relationship at all. Today nothing else runs on the domain,
-  so this is latent rather than live; the trap is that it activates silently
-  the day a login appears elsewhere on `bhushan.fun`.
-
-Note that theft of either credential is **not** Cloudflare account takeover:
-neither can log in, change account settings, or reach billing. Keep 2FA on the
-account and that boundary holds.
-
-## Setup
-
-Requires Python 3.11+ and a domain whose DNS is managed by Cloudflare.
-
-### 1. App
-
-```bash
-git clone https://github.com/satyasaibhushan/devbox-status.git ~/devbox-status
-cd ~/devbox-status/backend
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+```sh
+npm ci
+npx wrangler login
+npx wrangler d1 create server-status
 ```
 
-Install and start the service:
+Put the returned database ID into `wrangler.jsonc`, replacing the all-zero placeholder. Then:
 
-```bash
-mkdir -p ~/.config/systemd/user
-cp ~/devbox-status/deploy/devbox-status.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now devbox-status.service
-curl -s http://127.0.0.1:8420/api/status
+```sh
+npx wrangler d1 execute server-status --remote --file=schema.sql
+npm run check
+npm run deploy
 ```
 
-### 2. Tunnel
+Keep the printed `https://server-status.<account>.workers.dev` URL. Use it for reporter setup and verify `/api/status` lists devbox and wspace as offline before installing either reporter. Do not switch the public hostname yet.
 
-Install `cloudflared` (no root needed):
+Create a separate 64-character hex token for each machine on the admin laptop. Keep these files private and out of git:
 
-```bash
-mkdir -p ~/.local/bin
-curl -fsSL -o ~/.local/bin/cloudflared \
-  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-chmod +x ~/.local/bin/cloudflared
+```sh
+mkdir -p ~/.config/server-status
+chmod 700 ~/.config/server-status
+openssl rand -hex 32 > ~/.config/server-status/devbox.token
+openssl rand -hex 32 > ~/.config/server-status/wspace.token
+chmod 600 ~/.config/server-status/*.token
+npx wrangler secret put DEVBOX_TOKEN < ~/.config/server-status/devbox.token
+npx wrangler secret put WSPACE_TOKEN < ~/.config/server-status/wspace.token
 ```
 
-Authorize, create the tunnel, and point DNS at it:
+Only the Cloudflare account and this repository can change the machine list or dashboard. The tokens authorize a machine to replace only its own metric report. Visitors can only read `GET /api/status` and the static page. No login or edit controls are exposed publicly.
 
-```bash
-cloudflared tunnel login
-cloudflared tunnel create devbox-status
-cloudflared tunnel route dns devbox-status devbox.bhushan.fun
-```
+## Install the reporters
 
-Then **move `cert.pem` off the box** to your admin machine — see
-[Threat model](#threat-model-what-if-the-devbox-is-compromised). Nothing at
-runtime needs it:
+The reporter needs Python 3, `python3-venv`, and outbound HTTPS. It prompts for the matching token without echoing it. The install script saves it in a user-only environment file and starts a systemd user timer.
 
-```bash
-scp devbox:~/.cloudflared/cert.pem ~/.cloudflared/cert.pem   # from the laptop
-ssh devbox 'rm ~/.cloudflared/cert.pem'
-```
+On devbox, use its existing checkout if present:
 
-Write `~/.cloudflared/config.yml` (`chmod 600`). Pin the tunnel by **UUID, not
-name** — resolving a name is an API call needing `cert.pem`:
-
-```yaml
-tunnel: <TUNNEL_ID>
-credentials-file: /home/YOUR_USER/.cloudflared/<TUNNEL_ID>.json
-
-ingress:
-  # the only hostname this tunnel serves, to the only port it may reach
-  - hostname: devbox.bhushan.fun
-    service: http://127.0.0.1:8420
-  - service: http_status:404
-```
-
-The trailing `http_status:404` matters: without it, unmatched hostnames could
-fall through to the origin.
-
-Then run it as a service:
-
-```bash
-cp ~/devbox-status/deploy/cloudflared.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now cloudflared.service
-```
-
-### 3. Survive reboots
-
-`systemd --user` services stop when the last session ends, so enable lingering
-(the only step needing root):
-
-```bash
+```sh
+git -C ~/devbox-status pull --ff-only
+cd ~/devbox-status
+bash deploy/install-reporter.sh devbox https://server-status.<account>.workers.dev
 sudo loginctl enable-linger "$USER"
 ```
 
-## Notes
+On the WorkSpace:
 
-- `~/.cloudflared/cert.pem` and `<TUNNEL_ID>.json` are tunnel credentials.
-  Keep them on the box; they are gitignored here.
-- The namespace-based systemd hardening options (`ProtectSystem`,
-  `ProtectHome`, …) are deliberately omitted — they need unprivileged user
-  namespaces, which are restricted for `systemd --user` services on Ubuntu,
-  and the unit fails with `218/CAPABILITIES` if they are set.
-
-## Logs
-
-```bash
-systemctl --user status devbox-status.service cloudflared.service
-journalctl --user -u devbox-status.service -f
+```sh
+git clone https://github.com/satyasaibhushan/devbox-status.git ~/Code/Personal/devbox-status
+cd ~/Code/Personal/devbox-status
+bash deploy/install-reporter.sh wspace https://server-status.<account>.workers.dev
+sudo loginctl enable-linger "$USER"
 ```
+
+If the repo already exists, pull it instead of cloning. Enter each machine's own token from the private file on the admin laptop. Never put tokens in command arguments or the repository.
+
+Verify each machine's timer and the public API:
+
+```sh
+systemctl --user status server-status-reporter.timer
+journalctl --user -u server-status-reporter.service -n 10 --no-pager
+```
+
+The first run should log `Heartbeat accepted`. The API should show both machines online with fresh `received_at` values. Stop one timer temporarily and wait 150 seconds to check its offline state, then restart it.
+
+## Move `devbox.bhushan.fun`
+
+Once both reporters work through the `workers.dev` URL, remove the existing `devbox.bhushan.fun` Tunnel DNS route and add that hostname as a Worker custom domain in Cloudflare. Confirm the new page and `/api/status` load through the hostname. Then stop the old devbox `cloudflared.service` and `devbox-status.service`. Keep the reporter timer running. The reporter URLs can continue using `workers.dev` so a later DNS change does not stop reporting.
+
+The old tunnel stays live until this cutover. Do not install a public tunnel or open an inbound port on the company WorkSpace.
+
+## Add a machine later
+
+Add its ID, display name, and unique secret name to `src/hosts.ts`; deploy the Worker; create and set a new token with `wrangler secret put`; install the same reporter with that ID. The machine will appear offline until its first report. Remove its host entry and secret to retire it.
+
+## Local checks
+
+`npm run check` runs TypeScript validation, API tests, and a Cloudflare dry-run build. `schema.sql` is the D1 schema. The old FastAPI app remains available for local metric checks at `/api/status` during migration.

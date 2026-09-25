@@ -7,8 +7,15 @@ __pycache__/
 *.pem
 *.json
 !package.json
+!package-lock.json
+!tsconfig.json
 .cloudflared/
 cert.pem
+
+# Local build and secrets
+node_modules/
+.wrangler/
+.dev.vars
 
 # OS
 .DS_Store

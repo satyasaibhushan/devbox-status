@@ -12,7 +12,8 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
 def read_temperatures():
-    temps = psutil.sensors_temperatures()
+    sensor_reader = getattr(psutil, "sensors_temperatures", None)
+    temps = sensor_reader() if sensor_reader else None
     if not temps:
         return []
     readings = []

@@ -1,0 +1,17 @@
+{
+  "name": "server-status",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit && node --import tsx --test tests/*.test.ts && wrangler deploy --dry-run",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.6",
+    "@cloudflare/workers-types": "5.20260925.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.141.0"
+  }
+}
