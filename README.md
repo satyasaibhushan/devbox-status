@@ -1,39 +1,19 @@
 # Server status
 
-Public, read-only status for devbox and the AWS WorkSpace at `devbox.bhushan.fun`. Each machine sends CPU, memory, disk, uptime, and sensor readings once a minute. The page is hosted by Cloudflare, so it remains reachable when a machine is down. A machine shows offline 150 seconds after its last accepted report.
+Public, read-only status for devbox and the AWS WorkSpace. The new page is live at `https://server-status.varshneyabhushan.workers.dev`; `devbox.bhushan.fun` still serves the old devbox-only page until cutover. Each machine sends CPU, memory, disk, uptime, and sensor readings once a minute. A machine shows offline 150 seconds after its last accepted report.
 
 The existing devbox-only FastAPI page in `frontend/` and its Cloudflare Tunnel stay untouched until the cutover. The new page is in `site/`; the Worker API and machine list are in `src/`.
 
-## Deploy the shared page
+## Cloudflare setup
 
-From this repo on your admin laptop:
+Done on the admin Mac: D1 database `server-status` was created, `schema.sql` was applied, the Worker was deployed, and the `DEVBOX_TOKEN` and `WSPACE_TOKEN` secrets were set. The database ID is in `wrangler.jsonc`. Private copies of the tokens are at `~/.config/server-status/{devbox,wspace}.token` on that Mac. Do not recreate or commit them.
+
+For later code updates from the admin Mac:
 
 ```sh
 npm ci
-npx wrangler login
-npx wrangler d1 create server-status
-```
-
-Put the returned database ID into `wrangler.jsonc`, replacing the all-zero placeholder. Then:
-
-```sh
-npx wrangler d1 execute server-status --remote --file=schema.sql
 npm run check
 npm run deploy
-```
-
-Keep the printed `https://server-status.<account>.workers.dev` URL. Use it for reporter setup and verify `/api/status` lists devbox and wspace as offline before installing either reporter. Do not switch the public hostname yet.
-
-Create a separate 64-character hex token for each machine on the admin laptop. Keep these files private and out of git:
-
-```sh
-mkdir -p ~/.config/server-status
-chmod 700 ~/.config/server-status
-openssl rand -hex 32 > ~/.config/server-status/devbox.token
-openssl rand -hex 32 > ~/.config/server-status/wspace.token
-chmod 600 ~/.config/server-status/*.token
-npx wrangler secret put DEVBOX_TOKEN < ~/.config/server-status/devbox.token
-npx wrangler secret put WSPACE_TOKEN < ~/.config/server-status/wspace.token
 ```
 
 Only the Cloudflare account and this repository can change the machine list or dashboard. The tokens authorize a machine to replace only its own metric report. Visitors can only read `GET /api/status` and the static page. No login or edit controls are exposed publicly.
@@ -42,25 +22,28 @@ Only the Cloudflare account and this repository can change the machine list or d
 
 The reporter needs Python 3, `python3-venv`, and outbound HTTPS. It prompts for the matching token without echoing it. The install script saves it in a user-only environment file and starts a systemd user timer.
 
-On devbox, use its existing checkout if present:
+On the admin Mac, copy the devbox token with `pbcopy < ~/.config/server-status/devbox.token`. Then on devbox:
 
 ```sh
-git -C ~/devbox-status pull --ff-only
+sudo apt-get install -y python3-venv
+if [ -d ~/devbox-status/.git ]; then git -C ~/devbox-status pull --ff-only; else git clone https://github.com/satyasaibhushan/devbox-status.git ~/devbox-status; fi
 cd ~/devbox-status
-bash deploy/install-reporter.sh devbox https://server-status.<account>.workers.dev
+bash deploy/install-reporter.sh devbox https://server-status.varshneyabhushan.workers.dev
 sudo loginctl enable-linger "$USER"
 ```
 
-On the WorkSpace:
+Paste the copied token when prompted, then clear the Mac clipboard with `printf '' | pbcopy`. On the Mac, copy the WorkSpace token with `pbcopy < ~/.config/server-status/wspace.token`. Then on the WorkSpace:
 
 ```sh
+sudo apt-get install -y python3-venv
+mkdir -p ~/Code/Personal
 git clone https://github.com/satyasaibhushan/devbox-status.git ~/Code/Personal/devbox-status
 cd ~/Code/Personal/devbox-status
-bash deploy/install-reporter.sh wspace https://server-status.<account>.workers.dev
+bash deploy/install-reporter.sh wspace https://server-status.varshneyabhushan.workers.dev
 sudo loginctl enable-linger "$USER"
 ```
 
-If the repo already exists, pull it instead of cloning. Enter each machine's own token from the private file on the admin laptop. Never put tokens in command arguments or the repository.
+Paste the WorkSpace token when prompted, then clear the Mac clipboard. If the WorkSpace repo already exists, pull it instead of cloning. Never put tokens in command arguments or the repository.
 
 Verify each machine's timer and the public API:
 
