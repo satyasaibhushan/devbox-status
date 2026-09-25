@@ -22,7 +22,11 @@ def main():
         url,
         data=payload,
         method="POST",
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "server-status-reporter/1.0",
+        },
     )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
