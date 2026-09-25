@@ -1,0 +1,11 @@
+[Unit]
+Description=Send server status every five seconds
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=5s
+AccuracySec=1s
+Unit=server-status-reporter.service
+
+[Install]
+WantedBy=timers.target

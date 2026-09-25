@@ -40,19 +40,7 @@ ExecStart=$repo_dir/backend/.venv/bin/python $repo_dir/backend/report.py
 NoNewPrivileges=yes
 EOF
 
-cat >"$unit_dir/server-status-reporter.timer" <<'EOF'
-[Unit]
-Description=Send server status every minute
-
-[Timer]
-OnBootSec=30s
-OnUnitActiveSec=60s
-AccuracySec=10s
-Unit=server-status-reporter.service
-
-[Install]
-WantedBy=timers.target
-EOF
+install -m 644 "$repo_dir/deploy/server-status-reporter.timer" "$unit_dir/server-status-reporter.timer"
 
 systemctl --user daemon-reload
 systemctl --user enable --now server-status-reporter.timer

@@ -36,5 +36,5 @@ export function validMetrics(value: unknown): value is Metrics {
 }
 
 export function online(receivedAt: number | null, now: number): boolean {
-  return receivedAt !== null && receivedAt <= now && now - receivedAt < 150_000;
+  return receivedAt !== null && receivedAt <= now && now - receivedAt < 30_000;
 }

@@ -1,6 +1,6 @@
 # Server status
 
-Public, read-only status for devbox and the AWS WorkSpace at `https://devbox.bhushan.fun`. Each machine sends CPU, memory, disk, uptime, and sensor readings once a minute. A machine shows offline 150 seconds after its last accepted report.
+Public, read-only status for devbox and the AWS WorkSpace at `https://devbox.bhushan.fun`. Each machine sends CPU, memory, disk, uptime, and sensor readings about every five seconds. The page refreshes every four seconds. A machine shows offline 30 seconds after its last accepted report.
 
 The page is in `site/`; the Worker API and machine list are in `src/`. The previous devbox-only FastAPI app in `frontend/` remains installed. Its Cloudflare Tunnel stays active because it also serves `ssh.bhushan.fun`.
 
@@ -52,7 +52,16 @@ systemctl --user status server-status-reporter.timer
 journalctl --user -u server-status-reporter.service -n 10 --no-pager
 ```
 
-The first run should log `Heartbeat accepted`. The API should show both machines online with fresh `received_at` values. Stop one timer temporarily and wait 150 seconds to check its offline state, then restart it.
+The first run should log `Heartbeat accepted`. The API should show both machines online with fresh `received_at` values. Stop one timer temporarily and wait 30 seconds to check its offline state, then restart it.
+
+To apply a timer interval change without re-entering the token, pull the repo on each machine and run:
+
+```sh
+install -m 644 deploy/server-status-reporter.timer ~/.config/systemd/user/server-status-reporter.timer
+systemctl --user daemon-reload
+systemctl --user restart server-status-reporter.timer
+systemctl --user start server-status-reporter.service
+```
 
 ## Hostname routing
 
