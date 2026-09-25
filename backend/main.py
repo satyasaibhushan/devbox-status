@@ -1,3 +1,4 @@
+import math
 import time
 from pathlib import Path
 
@@ -19,6 +20,8 @@ def read_temperatures():
     readings = []
     for chip, entries in temps.items():
         for entry in entries:
+            if not isinstance(entry.current, (int, float)) or not math.isfinite(entry.current) or not -100 <= entry.current <= 300:
+                continue
             readings.append(
                 {
                     "chip": chip,
