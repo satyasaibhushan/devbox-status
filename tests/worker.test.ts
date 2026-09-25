@@ -46,6 +46,7 @@ function heartbeat(id: string, body: unknown, auth = token): Request {
 
 test("rejects malformed metrics and marks old reports offline", () => {
   assert.equal(validMetrics(sample), true);
+  assert.equal(validMetrics({ ...sample, temperatures: [{ ...sample.temperatures[0], high: 65261.85, critical: 65261.85 }] }), true);
   assert.equal(validMetrics({ ...sample, cpu: { ...sample.cpu, percent: 101 } }), false);
   assert.equal(validMetrics({ ...sample, temperatures: [{ ...sample.temperatures[0], label: "x".repeat(81) }] }), false);
   assert.equal(online(1000, 150999), true);

@@ -30,8 +30,8 @@ export function validMetrics(value: unknown): value is Metrics {
     record(item) && typeof item.chip === "string" && item.chip.length <= 80 &&
     typeof item.label === "string" && item.label.length <= 80 &&
     number(item.current, -100, 300) &&
-    (item.high === null || number(item.high, -100, 300)) &&
-    (item.critical === null || number(item.critical, -100, 300)),
+    (item.high === null || number(item.high, -100, 100_000)) &&
+    (item.critical === null || number(item.critical, -100, 100_000)),
   );
 }
 
