@@ -1,12 +1,12 @@
 # Server status
 
-Public, read-only status for devbox and the AWS WorkSpace at `https://devbox.bhushan.fun`. Each machine sends CPU, memory, disk, uptime, and sensor readings about every five seconds. The page refreshes every four seconds. A machine shows offline 30 seconds after its last accepted report.
+Public, read-only status for devbox and vmockbox (the VMock EC2 dev box) at `https://devbox.bhushan.fun`. Each machine sends CPU, memory, disk, uptime, and sensor readings about every five seconds. The page refreshes every four seconds. A machine shows offline 30 seconds after its last accepted report.
 
 The page is in `site/`; the Worker API and machine list are in `src/`. The previous devbox-only FastAPI app in `frontend/` remains installed. Its Cloudflare Tunnel stays active because it also serves `ssh.bhushan.fun`.
 
 ## Cloudflare setup
 
-Done on the admin Mac: D1 database `server-status` was created, `schema.sql` was applied, the Worker was deployed, and the `DEVBOX_TOKEN` and `WSPACE_TOKEN` secrets were set. The database ID is in `wrangler.jsonc`. Private copies of the tokens are at `~/.config/server-status/{devbox,wspace}.token` on that Mac. Do not recreate or commit them.
+Done on the admin Mac: D1 database `server-status` was created, `schema.sql` was applied, the Worker was deployed, and the `DEVBOX_TOKEN` and `VMOCKBOX_TOKEN` secrets were set. The database ID is in `wrangler.jsonc`. Private copies of the tokens are at `~/.config/server-status/{devbox,vmockbox}.token` on that Mac. Do not recreate or commit them.
 
 For later code updates from the admin Mac:
 
@@ -32,18 +32,18 @@ bash deploy/install-reporter.sh devbox https://server-status.varshneyabhushan.wo
 sudo loginctl enable-linger "$USER"
 ```
 
-Paste the copied token when prompted, then clear the Mac clipboard with `printf '' | pbcopy`. On the Mac, copy the WorkSpace token with `pbcopy < ~/.config/server-status/wspace.token`. Then on the WorkSpace:
+Paste the copied token when prompted, then clear the Mac clipboard with `printf '' | pbcopy`. On the Mac, copy the vmockbox token with `pbcopy < ~/.config/server-status/vmockbox.token`. Then on vmockbox:
 
 ```sh
 sudo apt-get install -y python3-venv
 mkdir -p ~/Code/Personal
 git clone https://github.com/satyasaibhushan/devbox-status.git ~/Code/Personal/devbox-status
 cd ~/Code/Personal/devbox-status
-bash deploy/install-reporter.sh wspace https://server-status.varshneyabhushan.workers.dev
+bash deploy/install-reporter.sh vmockbox https://server-status.varshneyabhushan.workers.dev
 sudo loginctl enable-linger "$USER"
 ```
 
-Paste the WorkSpace token when prompted, then clear the Mac clipboard. If the WorkSpace repo already exists, pull it instead of cloning. Never put tokens in command arguments or the repository.
+Paste the vmockbox token when prompted, then clear the Mac clipboard. If the vmockbox repo already exists, pull it instead of cloning. Never put tokens in command arguments or the repository.
 
 Verify each machine's timer and the public API:
 
@@ -67,7 +67,7 @@ systemctl --user start server-status-reporter.service
 
 `wrangler.jsonc` routes `devbox.bhushan.fun/*` to the Worker. The existing proxied DNS record and Cloudflare Tunnel remain in place, preserving `ssh.bhushan.fun`. Do not stop `cloudflared.service`; it carries SSH. The reporters use the `workers.dev` URL independently of the public hostname.
 
-Do not install a public tunnel or open an inbound port on the company WorkSpace.
+Do not install a public tunnel or open an inbound port on the company vmockbox.
 
 ## Add a machine later
 

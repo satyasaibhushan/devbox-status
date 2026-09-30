@@ -31,7 +31,7 @@ function environment() {
       DB: db,
       ASSETS: { fetch: async () => new Response("asset") },
       DEVBOX_TOKEN: token,
-      WSPACE_TOKEN: "b".repeat(64),
+      VMOCKBOX_TOKEN: "b".repeat(64),
     },
   };
 }
@@ -58,7 +58,7 @@ test("a machine can only send valid reports with its own token", async () => {
   const { rows, env } = environment();
   const fetch = (request: Request) => worker.fetch(request, env as unknown as Parameters<typeof worker.fetch>[1]);
   assert.equal((await fetch(heartbeat("devbox", sample, "wrong"))).status, 401);
-  assert.equal((await fetch(heartbeat("wspace", sample))).status, 401);
+  assert.equal((await fetch(heartbeat("vmockbox", sample))).status, 401);
   assert.equal((await fetch(heartbeat("unknown", sample))).status, 404);
   assert.equal((await fetch(heartbeat("devbox", { ...sample, disk: { ...sample.disk, used: -1 } }))).status, 400);
   assert.equal(rows.size, 0);
@@ -69,6 +69,6 @@ test("a machine can only send valid reports with its own token", async () => {
   const data = await response.json() as { hosts: { id: string; online: boolean; metrics: typeof sample | null }[] };
   assert.equal(response.headers.get("Cache-Control"), "no-store");
   assert.equal(data.hosts.find((host) => host.id === "devbox")?.online, true);
-  assert.equal(data.hosts.find((host) => host.id === "wspace")?.metrics, null);
+  assert.equal(data.hosts.find((host) => host.id === "vmockbox")?.metrics, null);
   assert.equal(JSON.stringify(data).includes(token), false);
 });
